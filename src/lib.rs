@@ -45,7 +45,7 @@ pub fn trusted_balance_transfer<T: PublicKey>(
         from, to, nonce, amount
     );
 
-    let call = TrustedCall::balance_transfer(from.into(), to, amount);
+    let call = TrustedCall::balance_transfer(from, to, amount);
     let trusted_call_signed =
         call.sign(&KeyPair::Sr25519(key_ring.pair()), nonce, mrenclave, &shard);
     let trusted_operation = TrustedOperation::direct_call(trusted_call_signed);
@@ -55,7 +55,7 @@ pub fn trusted_balance_transfer<T: PublicKey>(
     let mut rng = OsRng;
     let padding = PaddingScheme::new_oaep::<Sha256>();
     let cyphertext = shielding_pubkey
-        .encrypt(&mut rng, padding, &data.as_slice())
+        .encrypt(&mut rng, padding, data.as_slice())
         .map_err(|_| "failed to encrypt")?;
     // Create `Request`
     let request = Request { shard, cyphertext };
@@ -129,16 +129,13 @@ pub fn trusted_balance_transfer<T: PublicKey>(
     }
 }
 
-pub fn trusted_getter_nonce<T: PublicKey>(
+pub fn get_trusted_getter<T: PublicKey>(
     url: &'static str,
     key_ring: AccountKeyring,
     shard: H256,
     shielding_pubkey: T,
-) -> Result<u32, String> {
-    // Create `TrustedGetter`
-    let account_id: AccountId32 = key_ring.into();
-    let trusted_getter = TrustedGetter::nonce(account_id.clone());
-    println!("Creating trusted nonce call with account id {}", account_id);
+    trusted_getter: TrustedGetter,
+) -> Result<Vec<u8>, String> {
     // Sign Trusted Getter to give a `SignedTrustedGetter``
     let signed_trusted_getter = trusted_getter.sign(&KeyPair::Sr25519(key_ring.pair()));
     // Wrap with `Getter``
@@ -151,7 +148,7 @@ pub fn trusted_getter_nonce<T: PublicKey>(
     let mut rng = OsRng;
     let padding = PaddingScheme::new_oaep::<Sha256>();
     let cyphertext = shielding_pubkey
-        .encrypt(&mut rng, padding, &data.as_slice())
+        .encrypt(&mut rng, padding, data.as_slice())
         .map_err(|_| "failed to encrypt")?;
 
     // Create `Request`
@@ -198,11 +195,7 @@ pub fn trusted_getter_nonce<T: PublicKey>(
                                         .map_err(|_| "failed to decode response")?
                                         .expect("if it decoded to an option");
 
-                                let value = value.as_slice();
-
-                                return Ok(u32::from_le_bytes(
-                                    value.try_into().map_err(|_| "this isn't a u32")?,
-                                ));
+                                return Ok(value);
                             }
                         }
                     },
@@ -212,6 +205,45 @@ pub fn trusted_getter_nonce<T: PublicKey>(
             _ => return Err("Unknown response".into()),
         }
     }
+}
+
+pub fn trusted_getter_nonce<T: PublicKey>(
+    url: &'static str,
+    key_ring: AccountKeyring,
+    account_id: AccountId32,
+    shard: H256,
+    shielding_pubkey: T,
+) -> Result<u32, String> {
+    let trusted_getter = TrustedGetter::nonce(account_id.clone());
+    println!("Creating trusted nonce call with account id {}", account_id);
+
+    let value = get_trusted_getter(url, key_ring, shard, shielding_pubkey, trusted_getter)?;
+    let value = value.as_slice();
+
+    Ok(u32::from_le_bytes(
+        value.try_into().map_err(|_| "this isn't a u32")?,
+    ))
+}
+
+pub fn trusted_getter_balance<T: PublicKey>(
+    url: &'static str,
+    key_ring: AccountKeyring,
+    account_id: AccountId32,
+    shard: H256,
+    shielding_pubkey: T,
+) -> Result<u128, String> {
+    let trusted_getter = TrustedGetter::free_balance(account_id.clone());
+    println!(
+        "Creating trusted free balance call with account id {}",
+        account_id
+    );
+
+    let value = get_trusted_getter(url, key_ring, shard, shielding_pubkey, trusted_getter)?;
+    let value = value.as_slice();
+
+    Ok(u128::from_le_bytes(
+        value.try_into().map_err(|_| "this isn't a u128")?,
+    ))
 }
 
 pub fn get_shielding_key(url: &'static str) -> Result<RsaPublicKey, String> {
@@ -258,7 +290,7 @@ pub fn get_shielding_key(url: &'static str) -> Result<RsaPublicKey, String> {
                     }
                     _ => Err("Unexpected request status".into()),
                 },
-                Err(_) => return Err("Unable to decode return value".into()),
+                Err(_) => Err("Unable to decode return value".into()),
             }
         }
         _ => Err("Unknown response".into()),
@@ -298,15 +330,21 @@ mod tests {
         let mrenclave = bs58::decode(MRENCLAVE).into_vec().unwrap();
         let shard = H256::from_slice(&mrenclave);
 
-        let nonce = trusted_getter_nonce(URL, AccountKeyring::Alice, shard, shielding_key.clone())
-            .expect("a nonce value");
+        let nonce = trusted_getter_nonce(
+            URL,
+            AccountKeyring::Alice,
+            AccountKeyring::Alice.into(),
+            shard,
+            shielding_key.clone(),
+        )
+        .expect("a nonce value");
 
         trusted_balance_transfer(
             URL,
             nonce,
             AccountKeyring::Bob.into(),
             AccountKeyring::Alice,
-            100,
+            33333,
             shard,
             &mrenclave.try_into().unwrap(),
             shielding_key,
@@ -320,13 +358,37 @@ mod tests {
     }
 
     #[test]
+    fn test_free_balance_trusted_getter() {
+        let shielding_key = get_shielding_key(URL).unwrap();
+        let shard = bs58::decode(MRENCLAVE).into_vec().unwrap();
+        let shard = H256::from_slice(&shard);
+
+        let balance = trusted_getter_balance(
+            URL,
+            AccountKeyring::Alice,
+            AccountKeyring::Alice.into(),
+            shard,
+            shielding_key,
+        )
+        .expect("a balance");
+
+        println!("current balance is: {}", balance);
+    }
+
+    #[test]
     fn test_nonce_trusted_getter() {
         let shielding_key = get_shielding_key(URL).unwrap();
         let shard = bs58::decode(MRENCLAVE).into_vec().unwrap();
         let shard = H256::from_slice(&shard);
 
-        let nonce = trusted_getter_nonce(URL, AccountKeyring::Alice, shard, shielding_key)
-            .expect("a nonce value");
+        let nonce = trusted_getter_nonce(
+            URL,
+            AccountKeyring::Alice,
+            AccountKeyring::Alice.into(),
+            shard,
+            shielding_key,
+        )
+        .expect("a nonce value");
 
         println!("current nonce is: {}", nonce);
     }
