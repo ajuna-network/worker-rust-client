@@ -298,7 +298,9 @@ mod tests {
         let shard = bs58::decode(MRENCLAVE).into_vec().unwrap();
         let shard = H256::from_slice(&shard);
 
-        trusted_getter_nonce(URL, AccountKeyring::Alice, shard, shielding_key)
+        let nonce = trusted_getter_nonce(URL, AccountKeyring::Alice, shard, shielding_key)
             .expect("a nonce value");
+
+        println!("current nonce is: {}", nonce);
     }
 }
