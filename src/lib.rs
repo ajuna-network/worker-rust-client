@@ -17,7 +17,9 @@ extern crate serde_big_array;
 
 type Hash = sp_core::H256;
 
-use crate::types::{DirectRequestStatus, RpcRequest, RpcResponse, RpcReturnValue};
+use crate::types::{
+    DirectRequestStatus, RpcRequest, RpcResponse, RpcReturnValue, TrustedOperationStatus,
+};
 
 mod types;
 use rand::rngs::OsRng;
@@ -72,33 +74,58 @@ pub fn trusted_balance_transfer<T: PublicKey>(
     let text = serde_json::to_string(&request).unwrap();
     socket.write_message(Message::Text(text)).unwrap();
 
-    match socket
-        .read_message()
-        .map_err(|_| "failed to read from socket")?
-    {
-        Message::Text(response) => {
-            let response: RpcResponse =
-                serde_json::from_str(&response).expect("failed to deserialise");
+    loop {
+        match socket
+            .read_message()
+            .map_err(|_| "failed to read from socket")?
+        {
+            Message::Text(response) => {
+                let response: RpcResponse =
+                    serde_json::from_str(&response).expect("failed to deserialise");
 
-            match RpcReturnValue::decode(&mut response.result.as_slice()) {
-                Ok(return_value) => match return_value.status {
-                    DirectRequestStatus::Error => {
-                        return match String::decode(&mut return_value.value.as_slice()) {
-                            Ok(value) => Err(format!("error returned: {}", value)),
-                            Err(_) => Err("failed to decode".into()),
+                match RpcReturnValue::decode(&mut response.result.as_slice()) {
+                    Ok(return_value) => match return_value.status {
+                        DirectRequestStatus::Error => {
+                            return match String::decode(&mut return_value.value.as_slice()) {
+                                Ok(value) => Err(format!("error returned: {}", value)),
+                                Err(_) => Err("failed to decode".into()),
+                            }
                         }
-                    }
-                    // Operation would be submitted
-                    DirectRequestStatus::TrustedOperationStatus(_) => {
-                        return Hash::decode(&mut return_value.value.as_slice())
-                            .map_err(|_| "failed to decode hash".into());
-                    }
-                    _ => return Err("Unknown response".into()),
-                },
-                Err(_) => return Err("Unable to decode return value".into()),
+                        // Operation would be submitted
+                        DirectRequestStatus::TrustedOperationStatus(status) => match status {
+                            TrustedOperationStatus::Submitted => {
+                                let hash = Hash::decode(&mut return_value.value.as_slice())
+                                    .map_err(|_| String::from("failed to decode hash"))?;
+
+                                println!("Submitted with hash {:?}", hash);
+                            }
+                            TrustedOperationStatus::InSidechainBlock(hash) => {
+                                println!("In sidechain block with hash {:?}", hash);
+                                return Ok(hash);
+                            }
+                            _ => {
+                                return Err("Unhandled status for transaction".into());
+                            }
+                        },
+                        _ => {
+                            if !return_value.do_watch {
+                                let value =
+                                    Option::<Vec<u8>>::decode(&mut return_value.value.as_slice())
+                                        .map_err(|_| "failed to decode response")?
+                                        .expect("if it decoded to an option");
+
+                                // let value = value.as_slice();
+
+                                println!("{:?}", value);
+                            }
+                        }
+                    },
+                    Err(_) => return Err("Unable to decode return value".into()),
+                }
             }
+            Message::Close(_) => return Err("socket closed".into()),
+            _ => return Err("Unknown response".into()),
         }
-        _ => return Err("Unknown response".into()),
     }
 }
 
