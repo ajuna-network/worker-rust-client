@@ -5,6 +5,10 @@ use sp_runtime::MultiSignature;
 pub type Signature = MultiSignature;
 pub type AccountId = AccountId32;
 pub type BlockHash = H256;
+pub type Index = u32;
+/// Balance of an account.
+pub type Balance = u128;
+pub type ShardIdentifier = H256;
 
 #[derive(Encode, Decode, Clone, Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
@@ -115,11 +119,6 @@ pub enum Getter {
 pub enum PublicGetter {
     some_value,
 }
-
-pub type Index = u32;
-/// Balance of an account.
-pub type Balance = u128;
-pub type ShardIdentifier = H256;
 
 #[derive(Encode, Decode, Clone, Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
