@@ -16,6 +16,7 @@ serde-big-array = "0.3.2"
 rsa = "0.5.0"
 rand = "0.8.5"
 sha2 = "0.9.0"
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 # Substrate dependencies
 sp-core = { version = "5.0.0", default-features = false, features = ["full_crypto"] }
 sp-runtime = { version = "5.0.0", default-features = false }

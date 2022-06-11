@@ -1,3 +1,4 @@
+use std::fmt::Error;
 use codec::{Decode, Encode};
 use sp_core::H256;
 use sp_keyring::AccountKeyring;
@@ -7,6 +8,7 @@ use types::{
     Balance, Getter, KeyPair, Request, Rsa3072PublicKey, TrustedCall, TrustedGetter,
     TrustedOperation,
 };
+
 use url::Url;
 extern crate serde;
 #[macro_use]
@@ -16,6 +18,16 @@ extern crate serde_json;
 extern crate serde_big_array;
 
 type Hash = sp_core::H256;
+
+/// Helper method for decoding hex.
+pub fn decode_hex<T: AsRef<[u8]>>(message: T) -> Vec<u8> {
+    let mut message = message.as_ref();
+    if message[..2] == [b'0', b'x'] {
+        message = &message[2..]
+    }
+    hex::decode(message).expect("hex error")
+}
+
 
 use crate::types::{
     DirectRequestStatus, RpcRequest, RpcResponse, RpcReturnValue, TrustedOperationStatus,
@@ -83,7 +95,8 @@ pub fn trusted_balance_transfer<T: PublicKey>(
                 let response: RpcResponse =
                     serde_json::from_str(&response).expect("failed to deserialise");
 
-                match RpcReturnValue::decode(&mut response.result.as_slice()) {
+                let byte_array = decode_hex(response.result);
+                match RpcReturnValue::decode(&mut byte_array.as_slice()) {
                     Ok(return_value) => match return_value.status {
                         DirectRequestStatus::Error => {
                             return match String::decode(&mut return_value.value.as_slice()) {
@@ -180,7 +193,8 @@ pub fn get_trusted_getter<T: PublicKey>(
                 let response: RpcResponse =
                     serde_json::from_str(&response).expect("failed to deserialise");
 
-                match RpcReturnValue::decode(&mut response.result.as_slice()) {
+                let byte_array = decode_hex(response.result);
+                match RpcReturnValue::decode(&mut byte_array.as_slice()) {
                     Ok(return_value) => match return_value.status {
                         DirectRequestStatus::Error => {
                             return match String::decode(&mut return_value.value.as_slice()) {
@@ -268,7 +282,8 @@ pub fn get_shielding_key(url: &'static str) -> Result<RsaPublicKey, String> {
         Message::Text(response) => {
             let response: RpcResponse =
                 serde_json::from_str(&response).expect("failed to deserialise");
-            match RpcReturnValue::decode(&mut response.result.as_slice()) {
+            let byte_array = decode_hex(response.result);
+            match RpcReturnValue::decode(&mut byte_array.as_slice()) {
                 Ok(return_value) => match return_value.status {
                     DirectRequestStatus::Error => {
                         return match String::decode(&mut return_value.value.as_slice()) {
@@ -321,8 +336,8 @@ pub fn get_rpc_methods(url: &'static str) -> Result<String, String> {
 mod tests {
     use super::*;
 
-    const MRENCLAVE: &str = "CAG7CwtvDb5AvC3yoxXetYqY97tGSUdywP1U6pgYf1Kh";
-    const URL: &str = "ws://20.107.17.237:2000";
+    const MRENCLAVE: &str = "7oP94L1hy7BmLoyq4abHrS6HNXribKpR5xoizEWC8H7k";
+    const URL: &str = "ws://bb2a-89-44-66-47.ngrok.io";
 
     #[test]
     fn test_send_amount() {

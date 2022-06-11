@@ -76,7 +76,7 @@ pub struct RpcRequest {
 // Todo: result should not be Vec<u8>, but `T: Serialize`
 pub struct RpcResponse {
     pub jsonrpc: String,
-    pub result: Vec<u8>, // encoded RpcReturnValue
+    pub result: String, // encoded RpcReturnValue
     pub id: u32,
 }
 
