@@ -28,6 +28,11 @@ pub fn decode_hex<T: AsRef<[u8]>>(message: T) -> Vec<u8> {
     hex::decode(message).expect("hex error")
 }
 
+pub fn hex_encode(data: Vec<u8>) -> String {
+    let mut hex_str = hex::encode(data);
+    hex_str.insert_str(0, "0x");
+    hex_str
+}
 
 use crate::types::{
     DirectRequestStatus, RpcRequest, RpcResponse, RpcReturnValue, TrustedOperationStatus,
@@ -77,7 +82,7 @@ pub fn trusted_balance_transfer<T: PublicKey>(
     let request = RpcRequest {
         jsonrpc: "2.0".to_owned(),
         method: "author_submitAndWatchExtrinsic".to_owned(),
-        params: request_encoded.to_vec(),
+        params: vec![hex_encode(request_encoded.to_vec())],
         id: 1,
     };
 
@@ -172,7 +177,7 @@ pub fn get_trusted_getter<T: PublicKey>(
     let request = RpcRequest {
         jsonrpc: "2.0".to_owned(),
         method: "author_submitAndWatchExtrinsic".to_owned(),
-        params: request_encoded.to_vec(),
+        params: vec![hex_encode(request_encoded.to_vec())],
         id: 1,
     };
 

@@ -68,7 +68,7 @@ pub struct Rsa3072PublicKey {
 pub struct RpcRequest {
     pub jsonrpc: String,
     pub method: String,
-    pub params: Vec<u8>,
+    pub params: Vec<String>,
     pub id: i32,
 }
 
